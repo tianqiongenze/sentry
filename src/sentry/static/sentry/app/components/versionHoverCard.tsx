@@ -37,24 +37,12 @@ type Props = {
   reposError?: Error;
 };
 type State = {
-  loading: boolean;
-  error: boolean;
-  data: {};
   visible: boolean;
-  hasRepos: boolean;
-  deploys: Deploy[];
-  release: Release | null;
 };
 
 class VersionHoverCard extends React.Component<Props, State> {
   state: State = {
-    loading: true,
-    error: false,
-    data: {},
     visible: false,
-    hasRepos: false,
-    deploys: [],
-    release: null,
   };
 
   toggleHovercard() {
