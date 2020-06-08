@@ -73,11 +73,11 @@ class VersionHoverCard extends React.Component<Props, State> {
 
   getBody() {
     const {releaseVersion, release, deploys} = this.props;
-    if (!release || !deploys) {
+    if (release === undefined || deploys === undefined) {
       return {header: null, body: null};
     }
 
-    const lastCommit = release.lastCommit;
+    const {lastCommit} = release;
     const recentDeploysByEnvironment = deploys.reduce(function(dbe, deploy) {
       const {dateFinished, environment} = deploy;
       if (!dbe.hasOwnProperty(environment)) {
@@ -167,8 +167,8 @@ class VersionHoverCard extends React.Component<Props, State> {
     let header: React.ReactNode = null;
     let body: React.ReactNode = null;
 
-    const loading = deploysLoading || releaseLoading || reposLoading;
-    const error = deploysError || releaseError || reposError;
+    const loading = !!(deploysLoading || releaseLoading || reposLoading);
+    const error = deploysError ?? releaseError ?? reposError;
     const hasRepos = repos && repos.length > 0;
 
     if (loading) {
