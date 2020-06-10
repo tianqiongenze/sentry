@@ -8,7 +8,8 @@ from django.core.urlresolvers import reverse
 from requests.exceptions import (
     ConnectionError,
     Timeout,
-)  # RequestException, flake complaining I'm not using it
+    RequestException,
+)
 
 from sentry.eventstore.models import Event
 from sentry.http import safe_urlopen
@@ -41,11 +42,6 @@ TASK_OPTIONS = {
     "queue": "app_platform",
     "default_retry_delay": (60 * 5),  # Five minutes.
     "max_retries": 3,
-}
-
-RETRY_OPTIONS = {
-    "on": "RequestException, ServiceUnavailable, GatewayTimeout",
-    "exclude": "IgnorableSentryAppError",
 }
 
 # We call some models by a different name, publicly, than their class name.
@@ -83,7 +79,7 @@ def _webhook_event_data(event, group_id, project_id):
 
 
 @instrumented_task(name="sentry.tasks.sentry_apps.send_alert_event", **TASK_OPTIONS)
-@retry(**RETRY_OPTIONS)
+@retry(on=(RequestException, ServiceUnavailable, GatewayTimeout), ignore=(IgnorableSentryAppError))
 def send_alert_event(event, rule, sentry_app_id):
     group = event.group
     project = Project.objects.get_from_cache(id=group.project_id)
@@ -188,19 +184,19 @@ def _process_resource_change(action, sender, instance_id, retryer=None, *args, *
 
 
 @instrumented_task("sentry.tasks.process_resource_change", **TASK_OPTIONS)
-@retry()
+@retry(ignore=(IgnorableSentryAppError))
 def process_resource_change(action, sender, instance_id, *args, **kwargs):
     _process_resource_change(action, sender, instance_id, *args, **kwargs)
 
 
 @instrumented_task("sentry.tasks.process_resource_change_bound", bind=True, **TASK_OPTIONS)
-@retry()
+@retry(ignore=(IgnorableSentryAppError))
 def process_resource_change_bound(self, action, sender, instance_id, *args, **kwargs):
     _process_resource_change(action, sender, instance_id, retryer=self, *args, **kwargs)
 
 
 @instrumented_task(name="sentry.tasks.sentry_apps.installation_webhook", **TASK_OPTIONS)
-@retry(**RETRY_OPTIONS)
+@retry(on=(RequestException, ServiceUnavailable, GatewayTimeout), ignore=(IgnorableSentryAppError))
 def installation_webhook(installation_id, user_id, *args, **kwargs):
     from sentry.mediators.sentry_app_installations import InstallationNotifier
 
@@ -221,7 +217,7 @@ def installation_webhook(installation_id, user_id, *args, **kwargs):
 
 
 @instrumented_task(name="sentry.tasks.sentry_apps.workflow_notification", **TASK_OPTIONS)
-@retry(**RETRY_OPTIONS)
+@retry(on=(RequestException, ServiceUnavailable, GatewayTimeout), ignore=(IgnorableSentryAppError))
 def workflow_notification(installation_id, issue_id, type, user_id, *args, **kwargs):
     extra = {"installation_id": installation_id, "issue_id": issue_id}
 
@@ -320,9 +316,9 @@ def send_and_save_webhook_request(url, sentry_app, app_platform_event):
         track_response_code(e.__class__.__name__, slug, event)
         # Response code of 0 represents timeout
         buffer.add_request(response_code=0, org_id=org_id, event=event, url=url)
-        # Re-raise the exception because some of these tasks might retry on the exception
         if not sentry_app.is_published:
-            raise IgnorableSentryAppError("unpublished internal")  # get this NOT to send to sentry
+            raise IgnorableSentryAppError("unpublished or internal app")
+        # Re-raise the exception because some of these tasks might retry on the exception
         raise
 
     else:
@@ -336,7 +332,7 @@ def send_and_save_webhook_request(url, sentry_app, app_platform_event):
             project_id=resp.headers.get("Sentry-Hook-Project"),
         )
         if not sentry_app.is_published:
-            raise IgnorableSentryAppError("unpublished internal")  # get this NOT to send to sentry
+            raise IgnorableSentryAppError("unpublished or internal app")
 
         if resp.status_code == 503:
             raise ServiceUnavailable(six.binary_type(resp.status_code))
